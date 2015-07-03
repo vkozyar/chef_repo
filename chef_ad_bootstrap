@@ -1,0 +1,52 @@
+Need to receive ticket from AD on linux workstation.
+
+Vim /etc/krb5.conf
+
+And change it to :
+
+[logging]
+default = FILE:/var/log/krb5libs.log
+kdc = FILE:/var/log/krb5kdc.log
+admin_server = FILE:/var/log/kadmind.log
+
+[libdefaults]
+default_realm = CARBONITEINC.COM
+dns_lookup_realm = true
+dns_lookup_kdc = true
+ticket_lifetime = 24h
+renew_lifetime = 7d
+forwardable = true
+
+[realms]
+CARBONITEINC.COM = {
+  kdc = bos-dc1.carboniteinc.com
+  admin_server = bos-dc1.carboniteinc.com
+}
+
+{carboniteinc.com} = {
+}
+
+[domain_realm]
+.carboniteinc.com = CARBONITEINC.COM
+carboniteinc.com = CARBONITEINC.COM
+
+2. Receive ticket:
+
+Kinit your_username_in_AD
+
+(please don’t use kinit username@ad.server – it doesn’t work)
+
+You can list all tickets with the
+Klist
+
+3. Run the command with chef
+knife winrm -m sst2.carboniteinc.com ipconfig -t ssl -x 'adusername' -R CARBONITEINC.COM
+
+ipconfig as example. You can put there any. I tried
+knife winrm -m sst2.carboniteinc.com ‘chef-client -c c:/chef/client.rb -j c:/chef/first-boot.json -E _default’ -x 'adusername' -R CARBONITEINC.COM
+
+You can try to run powershell script etc instead of this command.
+
+I changed AllowUnecncrypted = false. But we may check the traffic with the sniffer. But there no password in any case.
+
+Need to check some errors with bootstrap. I will update you later about it.
