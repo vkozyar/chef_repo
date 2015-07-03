@@ -1,0 +1,117 @@
+# 
+# Arguments for the script 
+# -log file : as ex. Application
+# -entrytype : as ex. Warning
+# -Warningtype = "Warninig", If you want to find also Warning as addtinioal to entrytype above
+# -Informationtype = "Information", If you want to find also Information as addtinioal to entrytype above
+# -Source : as ex. DCOM or Kerberos  # we doesn't use it in this version
+# -Okleve : Threshold for ok. - Icinga level
+# -Warningleve : Threshold for Warning. - Icinga level
+# -Criticallevel : Threshold for Critical. - Icinga level
+# - days_ago : as ex. 3 days, by default 0 day
+# - mins_ago : as ex. last 5 minutes, by default 0 mins
+#
+# The command that used to take logs:
+#
+# get-eventlog -log "Application" -entrytype Warning
+# exit 0 - exit code for icinga
+
+Param(
+  [string]$log = "Application",
+  [string]$entrytype = "Error",
+  [string]$Warningtype = "0",
+  [string]$Informationtype = "0",
+  [string]$source = "MR_MONITOR",  # - The source parameter can be used after investigation on real production's file. Change it to MR_MONTOR on storage server. Don't worry it only read data. Any changes it will not to do.
+#  $before = (get-date -Format d), # -> as default today - it only for future uses. We need only logs after last days for monitoring.
+  $days_ago = 0,      # -> as default yesterday. It take logs since last day.
+  $mins_ago = 0,
+  $Oklevel=0,                                                  # default level to return Ok 
+  $Warninglevel=10,                                            # default level to return Warning
+  $Criticallevel=50                                            # default level to return Critical
+)
+
+new-item -ItemType File C:\TEMP\tmp.txt -Force | Out-Null
+
+$after = ((Get-Date (Get-Date -Format d)).AddDays(-$days_ago).AddMinutes(-$m))
+
+# By default of the $Warningtype and $Informationtype was not set we try to find only error
+
+#$clean - we collect data and avoid table headers
+if ((($Warningtype) -eq "0") -and  (($Informationtype) -eq "0")) {
+$clean=get-eventlog -log $log -EntryType $entrytype -source $source -after $after | Format-Table -HideTableHeaders | out-file C:\TEMP\tmp.txt
+$result=$?
+}
+# If the $Warningtype was set we try to find also Warninig messages
+elseif ((($Warningtype) -eq "Warning") -and  (($Informationtype) -eq "0")) {
+$clean=get-eventlog -log $log -EntryType $entrytype,$Warningtype -source $source -after $after | Format-Table -HideTableHeaders | out-file C:\TEMP\tmp.txt
+$result=$?
+}
+# If the $Informatiotype was set we try to find Inforamtion messages
+elseif ((($Warningtype) -eq "0") -and  (($Informationtype) -eq "Information")) {
+$clean=get-eventlog -log $log -EntryType $entrytype,$Informationtype -source $source -after $after | Format-Table -HideTableHeaders | out-file C:\TEMP\tmp.txt
+}
+# Try to find Error, Warning and Information if all of them was set in parameters
+else {
+$clean=get-eventlog -log $log -EntryType $entrytype,$Warningtype,$Informationtype -source $source -after $after | Format-Table -HideTableHeaders | out-file C:\TEMP\tmp.txt
+}
+
+#as we can't operate in variables with formating- we creatate temp txt file and get data from it
+$a=Get-Content C:\TEMP\tmp.txt 
+
+#$a.Count 
+#as we have clean string - we start from second element $i=1
+
+for 
+    (
+    $i=1 
+    $i -lt ($a.count-2)                               # We remove 2 last clean strings
+    $i++
+    )
+                    {
+                    $a[$i]                            #|Out-File C:\TEMP\tmp.txt -Append
+                    }
+$b=$a.count-2
+
+# For testing uncomment it
+# "There are $b records" 
+# $b=-2 # for testing only 
+
+if (($b+2) -eq $Oklevel) {
+ write-host 0
+ return "Ok"
+ exit(0)
+}
+elseif (($b+2) -gt $Warninglevel){
+  write-host 1
+  exit(1)
+  
+}
+elseif (($b+2) -gt $Criticallevel) {
+  
+  write-host 2
+  exit(2)
+}
+elseif (($b+2) -lt 0) {
+  write-host 3
+  exit(3)
+}
+
+Add in nsclient.ini 
+[/settings/external scripts/scripts]
+get_mr_event = cmd /c echo scripts\get_mr_monitor.ps1 -log System; exit($lastexitcode) | powershell.exe -command -
+
+restart nsclient service.
+
+define command{
+        command_name    check_win_event
+        command_line    $USER1$/check_nrpe -H $HOSTADDRESS$ -p 5666 -c get_mr_event
+}
+
+define service{
+        use                     generic-service
+        host_name               sst2
+        service_description     Event Win Check
+        check_command           check_win_event
+        }
+
+/etc/init.d/icinga reload
