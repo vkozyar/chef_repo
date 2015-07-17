@@ -1,0 +1,9 @@
+# bash script to take number of CPU on server
+ruby_block "take number of cpu" do
+  block do
+    num_cpu = Mixlib::ShellOut.new("grep processor /proc/cpuinfo | wc -l")
+    num_cpu.run_command
+    puts num_cpu.stdout
+    node.override['squid']['num_of_cpu'] = num_cpu.stdout
+  end
+end
